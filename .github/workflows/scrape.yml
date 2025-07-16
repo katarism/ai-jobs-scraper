@@ -43,12 +43,38 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y google-chrome-stable
         
-        # 安装ChromeDriver
-        CHROME_VERSION=$(google-chrome --version | cut -d " " -f3 | cut -d "." -f1)
-        DRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}")
-        wget -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/${DRIVER_VERSION}/chromedriver_linux64.zip"
-        sudo unzip /tmp/chromedriver.zip chromedriver -d /usr/local/bin/
+        # 获取Chrome版本
+        CHROME_VERSION=$(google-chrome --version | cut -d " " -f3 | cut -d "." -f1-3)
+        echo "Chrome version: $CHROME_VERSION"
+        
+        # 使用Chrome for Testing API获取匹配的ChromeDriver
+        CHROMEDRIVER_URL="https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json"
+        
+        # 安装jq用于JSON解析
+        sudo apt-get install -y jq
+        
+        # 查找匹配的ChromeDriver版本
+        DRIVER_VERSION=$(curl -s "$CHROMEDRIVER_URL" | jq -r ".versions[] | select(.version | startswith(\"$CHROME_VERSION\")) | .version" | head -1)
+        
+        if [ -z "$DRIVER_VERSION" ]; then
+          echo "Using latest stable ChromeDriver"
+          DRIVER_VERSION=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json" | jq -r '.channels.Stable.version')
+        fi
+        
+        echo "ChromeDriver version: $DRIVER_VERSION"
+        
+        # 下载ChromeDriver
+        DRIVER_URL="https://storage.googleapis.com/chrome-for-testing-public/$DRIVER_VERSION/linux64/chromedriver-linux64.zip"
+        wget -O /tmp/chromedriver.zip "$DRIVER_URL"
+        
+        # 解压安装
+        sudo unzip /tmp/chromedriver.zip -d /tmp/
+        sudo mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/
         sudo chmod +x /usr/local/bin/chromedriver
+        
+        # 验证安装
+        chromedriver --version
+        google-chrome --version
     
     - name: Run AI Jobs Scraper
       env:

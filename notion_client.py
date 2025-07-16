@@ -1,8 +1,8 @@
 import requests
 import json
+import time
 from datetime import datetime
 from config import *
-from rate_limiter import RateLimiter
 
 class NotionClient:
     def __init__(self):
@@ -11,11 +11,22 @@ class NotionClient:
             'Notion-Version': NOTION_VERSION,
             'Content-Type': 'application/json'
         }
-        self.rate_limiter = RateLimiter()
+        self.last_request_time = 0
+    
+    def _rate_limit_wait(self):
+        """Simple rate limiting - wait between requests"""
+        current_time = time.time()
+        time_since_last = current_time - self.last_request_time
+        
+        if time_since_last < REQUEST_DELAY:
+            sleep_time = REQUEST_DELAY - time_since_last
+            time.sleep(sleep_time)
+        
+        self.last_request_time = time.time()
     
     def _make_request(self, method, url, data=None):
         """Make rate-limited request to Notion API"""
-        self.rate_limiter.wait()
+        self._rate_limit_wait()
         
         try:
             if method.upper() == 'POST':

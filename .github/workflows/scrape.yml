@@ -76,15 +76,15 @@ jobs:
         chromedriver --version
         google-chrome --version
     
-    - name: Run AI Jobs Scraper
+    - name: Run AI Jobs Scraper Debug Test
       env:
         NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
         AI_JOBS_DATABASE_ID: ${{ secrets.AI_JOBS_DATABASE_ID }}
         CHANGE_LOG_DATABASE_ID: ${{ secrets.CHANGE_LOG_DATABASE_ID }}
       run: |
-        echo "🚀 Starting AI Jobs Scraper..."
-        python scraper.py
-        echo "✅ AI Jobs Scraper completed successfully!"
+        echo "🚀 Starting AI Jobs Scraper Debug Test..."
+        python debug_test.py
+        echo "✅ AI Jobs Scraper Debug Test completed!"
     
     - name: Upload logs as artifacts
       if: always()

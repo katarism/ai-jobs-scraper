@@ -47,49 +47,84 @@ class NotionClient:
             return None
     
     def create_job_entry(self, job_data):
-        """Create new job entry in Notion database with simplified structure"""
+        """Create new job entry in Notion database with correct field types"""
         url = f"{NOTION_API_URL}/pages"
         
-        # Simplified data structure - only essential fields
-        notion_data = {
-            "parent": {"database_id": AI_JOBS_DATABASE_ID},
-            "properties": {
-                "Name": {  # Most Notion databases have "Name" as title
-                    "title": [{"text": {"content": job_data.get('title', 'Unknown Job')[:100]}}]
-                }
-            }
+        # Build properties with correct field types based on database schema
+        properties = {}
+        
+        # Job Title (title field)
+        properties["Job Title"] = {
+            "title": [{"text": {"content": job_data.get('title', 'Unknown Job')[:100]}}]
         }
         
-        # Try to add additional fields if they exist in the database
-        try:
-            # Add company if possible
-            if job_data.get('company'):
-                notion_data["properties"]["Company"] = {
-                    "rich_text": [{"text": {"content": job_data['company'][:100]}}]
-                }
-            
-            # Add location if possible  
-            if job_data.get('location'):
-                notion_data["properties"]["Location"] = {
-                    "rich_text": [{"text": {"content": job_data['location'][:100]}}]
-                }
-            
-            # Add URL if possible
-            if job_data.get('url'):
-                notion_data["properties"]["URL"] = {
-                    "url": job_data['url'][:2000]
-                }
-            
-            # Add source if possible
-            if job_data.get('source'):
-                notion_data["properties"]["Source"] = {
-                    "rich_text": [{"text": {"content": job_data['source'][:100]}}]
-                }
-                
-        except Exception as e:
-            print(f"⚠️  Warning: Could not add additional fields: {e}")
+        # Company (select field) - need to provide select option
+        if job_data.get('company'):
+            properties["Company"] = {
+                "select": {"name": job_data['company'][:100]}
+            }
         
-        print(f"🔍 Attempting to create job entry: {json.dumps(notion_data, indent=2)}")
+        # Location (rich_text field)
+        if job_data.get('location'):
+            properties["Location"] = {
+                "rich_text": [{"text": {"content": job_data['location'][:100]}}]
+            }
+        
+        # Job Link (url field)
+        if job_data.get('url'):
+            properties["Job Link"] = {
+                "url": job_data['url'][:2000]
+            }
+        
+        # Description (rich_text field)
+        if job_data.get('description'):
+            properties["Description"] = {
+                "rich_text": [{"text": {"content": job_data['description'][:2000]}}]
+            }
+        
+        # Data Source (select field)
+        if job_data.get('source'):
+            properties["Data Source"] = {
+                "select": {"name": job_data['source'][:100]}
+            }
+        
+        # AI Relevance Level (select field)
+        ai_level = self._calculate_ai_relevance(job_data.get('title', ''), job_data.get('description', ''))
+        properties["AI Relevance Level"] = {
+            "select": {"name": ai_level}
+        }
+        
+        # Newsletter Status (select field)
+        properties["Newsletter Status"] = {
+            "select": {"name": "Pending"}
+        }
+        
+        # Position Type (select field)
+        properties["Position Type"] = {
+            "select": {"name": job_data.get('job_type', 'Full-time')}
+        }
+        
+        # Date Added (date field)
+        properties["Date Added"] = {
+            "date": {"start": datetime.now().isoformat()}
+        }
+        
+        # Date Last Checked (date field)
+        properties["Date Last Checked"] = {
+            "date": {"start": datetime.now().isoformat()}
+        }
+        
+        # Status (select field)
+        properties["Status"] = {
+            "select": {"name": "Active"}
+        }
+        
+        notion_data = {
+            "parent": {"database_id": AI_JOBS_DATABASE_ID},
+            "properties": properties
+        }
+        
+        print(f"🔍 Creating job entry: {job_data.get('title')} at {job_data.get('company')}")
         
         result = self._make_request('POST', url, notion_data)
         if result:
@@ -100,32 +135,41 @@ class NotionClient:
             return None
     
     def log_scraping_activity(self, source, jobs_found, jobs_added, status="Success"):
-        """Log scraping activity to change log database with simplified structure"""
+        """Log scraping activity to change log database"""
         url = f"{NOTION_API_URL}/pages"
         
+        # For change log, we need to check the schema of the change log database
+        # For now, use a simple structure
         log_data = {
             "parent": {"database_id": CHANGE_LOG_DATABASE_ID},
             "properties": {
+                # Assuming change log has a title field
                 "Name": {
                     "title": [{"text": {"content": f"{source} - {datetime.now().strftime('%Y-%m-%d %H:%M')}"}}]
                 }
             }
         }
         
-        # Try to add additional fields
+        # Try to add additional fields if they exist
         try:
-            log_data["properties"]["Source"] = {
-                "rich_text": [{"text": {"content": source}}]
-            }
-            log_data["properties"]["Jobs Found"] = {
-                "number": jobs_found
-            }
-            log_data["properties"]["Jobs Added"] = {
-                "number": jobs_added
-            }
-            log_data["properties"]["Status"] = {
-                "rich_text": [{"text": {"content": status}}]
-            }
+            # Add as rich_text fields for maximum compatibility
+            if hasattr(self, '_change_log_schema'):
+                # Use cached schema if available
+                pass
+            else:
+                # Add basic fields as rich_text
+                log_data["properties"]["Source"] = {
+                    "rich_text": [{"text": {"content": source}}]
+                }
+                log_data["properties"]["Jobs Found"] = {
+                    "rich_text": [{"text": {"content": str(jobs_found)}}]
+                }
+                log_data["properties"]["Jobs Added"] = {
+                    "rich_text": [{"text": {"content": str(jobs_added)}}]
+                }
+                log_data["properties"]["Status"] = {
+                    "rich_text": [{"text": {"content": status}}]
+                }
         except Exception as e:
             print(f"⚠️  Warning: Could not add log fields: {e}")
         
@@ -135,9 +179,57 @@ class NotionClient:
         return result
     
     def check_job_exists(self, job_title, company):
-        """Simplified duplicate check - just return False to allow all entries for now"""
-        print(f"🔍 Checking for duplicate: {job_title} at {company}")
-        return False  # Temporarily disable duplicate checking to test basic writing
+        """Check if job already exists in database"""
+        url = f"{NOTION_API_URL}/databases/{AI_JOBS_DATABASE_ID}/query"
+        
+        query_data = {
+            "filter": {
+                "and": [
+                    {
+                        "property": "Job Title",
+                        "title": {"contains": job_title}
+                    },
+                    {
+                        "property": "Company",
+                        "select": {"equals": company}
+                    }
+                ]
+            }
+        }
+        
+        result = self._make_request('POST', url, query_data)
+        if result and result.get('results'):
+            return len(result['results']) > 0
+        return False
+    
+    def _calculate_ai_relevance(self, title, description):
+        """Calculate AI relevance level based on job title and description"""
+        text = f"{title} {description}".lower()
+        
+        high_keywords = ['ai engineer', 'machine learning', 'deep learning', 'artificial intelligence', 
+                        'neural network', 'computer vision', 'nlp', 'data scientist', 'ml engineer']
+        
+        medium_keywords = ['ai', 'automation', 'algorithm', 'analytics', 'data engineer', 
+                          'software engineer', 'python', 'tensorflow', 'pytorch']
+        
+        low_keywords = ['tech', 'engineer', 'developer', 'software', 'programming']
+        
+        # Check for high relevance
+        for keyword in high_keywords:
+            if keyword in text:
+                return "High"
+        
+        # Check for medium relevance  
+        for keyword in medium_keywords:
+            if keyword in text:
+                return "Medium"
+        
+        # Check for low relevance
+        for keyword in low_keywords:
+            if keyword in text:
+                return "Low"
+        
+        return "Unknown"
     
     def test_connection(self):
         """Test Notion API connection"""
@@ -150,19 +242,3 @@ class NotionClient:
         else:
             print("❌ Notion connection failed!")
             return False
-    
-    def test_database_schema(self):
-        """Test and print database schema to debug field names"""
-        url = f"{NOTION_API_URL}/databases/{AI_JOBS_DATABASE_ID}"
-        
-        result = self._make_request('GET', url)
-        if result:
-            print("📋 Database schema:")
-            properties = result.get('properties', {})
-            for prop_name, prop_info in properties.items():
-                prop_type = prop_info.get('type', 'unknown')
-                print(f"  - {prop_name}: {prop_type}")
-            return properties
-        else:
-            print("❌ Could not retrieve database schema")
-            return None

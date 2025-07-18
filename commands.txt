@@ -1,0 +1,2 @@
+Run GUI:
+python3.13 gui_controller.py
